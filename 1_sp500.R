@@ -1,5 +1,5 @@
 
-# Prerequisites ----------------------------------------------------------------------------------------------
+# Prerequisites ----------------------------------------------------------------
 library(quantmod)   # get stock prices; useful stock analysis functions
 library(xts)        # working with extensible time series
 library(rvest)      # web scraping
@@ -9,7 +9,10 @@ library(forcats)    # working with factors
 library(lubridate)  # working with dates in tibbles / data frames
 library(plotly)     # Interactive plots
 
-# Web Scraping: Get the List of S&P500 Stocks ----------------------------------------------------------------
+
+
+# Web Scraping: Get the List of S&P500 Stocks --------------------------------------------------------
+
 # Web-scrape S&P500 stock list
 sp_500 <- read_html("https://en.wikipedia.org/wiki/List_of_S%26P_500_companies") %>%
     html_node("table.wikitable") %>%
@@ -24,10 +27,13 @@ names(sp_500) <- sp_500 %>%
     str_to_lower() %>%
     make.names()
 
-# Rewrite "." by "-", for ticker symbols with "." getSymbols() returns an error 
+
+# zamena tecky za pomlcku ve jmenech, jinak dojde k chybe pri stahovani cen ------------------------------
 sp_500[c(sapply("\\.", function(y) grep(y,sp_500$symbol))), ]
 sp_500$symbol <- (sapply("\\.", function(y) str_replace(sp_500$symbol,y,"-")))
 sp_500[c(sapply("\\-", function(y) grep(y,sp_500$symbol))), ]
+
+
 
 sp_500 %>% 
   lapply(function(x) x %>% unique() %>% length()) %>%
@@ -39,7 +45,9 @@ sp_500 %>%
   summarize(count = n()) %>%
   filter(count > 1)
 
-# Creating Functions to Map -----------------------------------------------------------------------------------         
+
+
+# Creating Functions to Map -----------------------------------------------------------------------------------
 get_stock_prices <- function(ticker, return_format = "tibble", ...) {
     # Get stock prices
     stock_prices_xts <- getSymbols(Symbols = ticker, auto.assign = FALSE, ...)
@@ -76,7 +84,11 @@ get_log_returns <- function(x, return_format = "tibble", period = 'daily', ...) 
     log_returns
 }
 
-# Getting stock prices (might take few minutes) -------------------------------------------------------------------
+# Manualy filtering out companies that causes problem during downloading the data
+#sp_500 <- sp_500 %>% 
+  #filter(!symbol %in% c("DOW"))
+
+# Mapping the Functions (might take few minutes) ----------------------------------------------------------------------------------
 from <- "2010-01-01"
 to   <- "2021-09-30"
 sp_500 <- sp_500 %>%
@@ -89,16 +101,26 @@ sp_500 <- sp_500 %>%
         )
         )
 
-# Within nested tables (dates and stock prices for each ticker symbol) might be some dates missing-----------------         
-# Checking for mising dates and filtering them out
+
+#u nekterych nested tabulek chybi datum a pak funkce get_log_returns vraci chybu kvuli order.by(Date)
+#musim mapovat funkci pres stock prices, takovou, aby mi vratila true, kdyz ve sloupci datum, chybihodnota a pak smazala prislusny symbol(cely radek)
+
+
+#funkce vraci true, kdyz pro nejaou firmu ve vnorene tabulce chybi nejaka hodnota ve sloupci datum(prvni sloupec)
 NA_date <- function(x){
   TRUE %in% is.na(x[,1])
 }
-         
+
+#Funkce je mapovana pres vsechny vnorene tabulky, vysledek logicke hodnoty v listu, list preveden na vektor a logicke hodnoty invertovany
+#do NA_sub se ulozi logicky vektor, TRUE pro radky z tabulky sp_500, kde nejsou chybejici hodnoty a chci je zachovat
+#False pro radky kde vnorene tabulka mela v datu chybejici hodnota a proto bude odstarena
 NA_sub <- !unlist(map(sp_500$stock.prices, function(.x) NA_date(.x)))
 sp_500 <- sp_500[NA_sub,]
 rm(NA_sub)
-# Calculating log.returns -------------------------------------------------------------------------------------------
+
+
+
+
 sp_500 <- sp_500 %>%
     mutate(
         log.returns  = map(stock.prices,
@@ -107,6 +129,23 @@ sp_500 <- sp_500 %>%
         sd.log.returns   = map_dbl(log.returns, ~ sd(.$Log.Returns)),
         n.trade.days = map_dbl(stock.prices, nrow)
     )
+
+
+
 #reducing and exporting data -----------------------------------------------------------------------------------------
+
 sp_500_rd <- sp_500[,colnames(sp_500)[c(-6,-7)]]
 write.csv(sp_500_rd, file = "sp_500_rd")
+
+
+
+
+
+
+
+
+
+
+
+
+
